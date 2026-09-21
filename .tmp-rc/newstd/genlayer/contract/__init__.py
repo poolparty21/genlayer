@@ -1,0 +1,699 @@
+"""
+Contract interaction and declaration module.
+
+This module provides functionality for:
+- Declaring main contracts with the ``Contract`` base class
+- Creating type-safe interfaces with ``@interface``
+- Deploying contracts with ``deploy``
+- Getting contract proxies with ``get_at``
+"""
+
+__all__ = (
+	'interface',
+	'deploy',
+	'Contract',
+	'get_at',
+	'Proxy',
+	'GenVMContractDeclaration',
+	'StorageView',
+	'ON',
+)
+
+import collections.abc
+import json
+import typing
+
+import genlayer.calldata as calldata
+from genlayer import IS_IN_VM
+from genlayer.chain import IAccount, InternalMessageParams
+from genlayer.types import Address, Lazy, u256
+
+if typing.TYPE_CHECKING or IS_IN_VM:
+	import _genlayer_wasi as wasi
+
+from genlayer._internal.on_chain.gl_call import gl_call_generic
+
+type ON = typing.Literal['decided', 'finalized']
+"""When the transaction message should be applied: ``'decided'`` or ``'finalized'``"""
+
+
+def _make_calldata_obj(method, args, kwargs) -> calldata.Encodable:
+	ret = {}
+	if method is not None:
+		ret[''] = method
+	if len(args) > 0:
+		ret.update({'args': args})
+	if len(kwargs) > 0:
+		ret.update({'kwargs': kwargs})
+	return ret
+
+
+from genlayer.vm import VMError  # noqa: E402
+from genlayer.vm.public_abi import StorageView  # noqa: E402
+
+
+class _ContractAtViewMethod:
+	__slots__ = ('_addr', '_catch_vm_error', '_name', '_state')
+
+	def __init__(
+		self,
+		name: str,
+		addr: Address,
+		state: StorageView,
+		catch_vm_error: bool = False,
+	):
+		self._addr = addr
+		self._name = name
+		self._state = state
+		self._catch_vm_error = catch_vm_error
+
+	def __call__(self, *args, **kwargs) -> calldata.Decoded | VMError:
+		return self.lazy(*args, **kwargs).get()
+
+	def lazy(self, *args, **kwargs) -> Lazy[calldata.Decoded | VMError]:
+		from genlayer.vm import (
+			_decode_sub_vm_result,
+			_decode_sub_vm_result_catching_vm_error,
+		)
+
+		decoder = (
+			_decode_sub_vm_result_catching_vm_error
+			if self._catch_vm_error
+			else _decode_sub_vm_result
+		)
+
+		return gl_call_generic(
+			{
+				'CallContract': {
+					'address': self._addr,
+					'calldata': _make_calldata_obj(self._name, args, kwargs),
+					'storage_view': self._state.value,
+					'catch_vm_error': self._catch_vm_error,
+				}
+			},
+			decoder,
+		)
+
+
+class _ContractAtEmitMethod:
+	__slots__ = ('_addr', '_fee_params', '_name', '_on', '_use_balance', '_value')
+
+	def __init__(
+		self,
+		name: str | None,
+		addr: Address,
+		value: u256,
+		on: str,
+		use_balance: bool = False,
+		fee_params: InternalMessageParams | None = None,
+	):
+		self._addr = addr
+		self._name = name
+		self._value = value
+		self._on = on
+		self._use_balance = use_balance
+		self._fee_params = fee_params
+
+	def __call__(self, *args, **kwargs) -> None:
+		message: dict[str, calldata.Encodable] = {
+			'address': self._addr,
+			'calldata': _make_calldata_obj(self._name, args, kwargs),
+			'value': self._value,
+			'on': self._on,
+		}
+		if self._use_balance:
+			message['use_balance'] = True
+		if self._fee_params is not None:
+			message['fee_params'] = self._fee_params
+		wasi.gl_call(calldata.encode({'EmitInternalMessage': message}))
+
+
+@typing.runtime_checkable
+class Proxy[TView, TSend](IAccount, typing.Protocol):
+	"""
+	Generic proxy interface for interacting with deployed GenVM contracts.
+
+	This protocol defines the interface for contract proxies that provide type-safe
+	access to view methods and write operations on deployed contracts.
+
+	:param TView: Type representing available view methods
+	:param TSend: Type representing available write methods
+	"""
+
+	@typing.overload
+	def view(
+		self,
+		*,
+		state: StorageView = StorageView.LATEST_DECIDED,
+		catch_vm_error: typing.Literal[False] = False,
+	) -> TView: ...
+
+	@typing.overload
+	def view(
+		self,
+		*,
+		state: StorageView = StorageView.LATEST_DECIDED,
+		catch_vm_error: typing.Literal[True],
+	) -> '_CaughtViewMethods': ...
+
+	@typing.overload
+	def view(
+		self,
+		*,
+		state: StorageView = StorageView.LATEST_DECIDED,
+		catch_vm_error: bool,
+	) -> TView | '_CaughtViewMethods': ...
+
+	def view(
+		self,
+		*,
+		state: StorageView = StorageView.LATEST_DECIDED,
+		catch_vm_error: bool = False,
+	) -> TView | '_CaughtViewMethods':
+		"""
+		Get a namespace for calling view methods.
+
+		:param state: Storage state to query against
+		:param catch_vm_error: return the callee's VM error instead of re-raising
+			it. A fatal one is never caught.
+		:returns: Object providing access to view methods
+		"""
+		...
+
+	def emit(
+		self,
+		*,
+		value: u256 = 0,
+		on: ON = 'finalized',
+		use_balance: bool = False,
+		fee_params: InternalMessageParams | None = None,
+	) -> TSend:
+		"""
+		Get a namespace for emitting write transactions.
+
+		:param value: Amount of native tokens to transfer with the transaction
+		:param on: When the transaction message should be emitted to consensus
+		:param use_balance: Fund the message fee from this contract's balance instead
+			of the sender's prefunded pool. Requires the
+			``can_use_balance_for_message_fees`` permission and ``fee_params``.
+		:param fee_params: Fee parameters GenVM meters the balance-funded fee from;
+			required when ``use_balance`` is set, ignored otherwise
+		:returns: Object providing access to write methods
+
+		.. warning::
+			Emitting transactions, especially with value transfers on ``decided``
+			may lead to undesired results. Prefer to use ``finalized`` (default)
+		"""
+		...
+
+	def emit_transfer(
+		self,
+		value: u256,
+		*,
+		on: ON = 'finalized',
+		use_balance: bool = False,
+		fee_params: InternalMessageParams | None = None,
+	) -> None:
+		"""
+		Emit a simple value transfer without calling any method. Receiver may catch it with
+		:py:meth:`Contract.__receive__` method, so users may need to supply non-zero gas
+
+		:param value: Amount of native tokens to transfer
+		:param on: When transaction message should be emitted to consensus
+		:param use_balance: Fund the message fee from this contract's balance; see :py:meth:`emit`
+		:param fee_params: Fee parameters for the balance-funded fee; required when ``use_balance`` is set
+
+		:raises ValueError: If value is zero
+		"""
+		...
+
+
+class ErasedMethods(typing.Protocol):
+	"""
+	Protocol for dynamically accessed contract methods.
+
+	This protocol allows accessing contract methods by name when the exact
+	interface is not known for type checker in IDE
+	"""
+
+	def __getattr__(self, name: str) -> typing.Callable:
+		"""
+		Get a callable for the named method.
+
+		:param name: Name of the method to access
+		:returns: Callable that can invoke the method
+		"""
+		...
+
+
+class _CaughtViewMethods(typing.Protocol):
+	def __getattr__(
+		self, name: str
+	) -> typing.Callable[..., calldata.Decoded | VMError]: ...
+
+
+class _ContractAt(Proxy[ErasedMethods, ErasedMethods]):
+	__slots__ = ('_address',)
+
+	def __init__(self, addr: Address):
+		if not isinstance(addr, Address):
+			raise TypeError('address expected')
+		self._address = addr
+
+	@property
+	def address(self) -> Address:
+		return self._address
+
+	@typing.overload
+	def view(
+		self,
+		*,
+		state: StorageView = StorageView.LATEST_DECIDED,
+		catch_vm_error: typing.Literal[False] = False,
+	) -> ErasedMethods: ...
+
+	@typing.overload
+	def view(
+		self,
+		*,
+		state: StorageView = StorageView.LATEST_DECIDED,
+		catch_vm_error: typing.Literal[True],
+	) -> _CaughtViewMethods: ...
+
+	@typing.overload
+	def view(
+		self,
+		*,
+		state: StorageView = StorageView.LATEST_DECIDED,
+		catch_vm_error: bool,
+	) -> ErasedMethods | _CaughtViewMethods: ...
+
+	def view(
+		self,
+		*,
+		state: StorageView = StorageView.LATEST_DECIDED,
+		catch_vm_error: bool = False,
+	) -> ErasedMethods | _CaughtViewMethods:
+		"""
+		:param catch_vm_error: return the callee's VM error instead of re-raising
+			it. A fatal one is never caught.
+		"""
+		return _ContractAtGetter(
+			_ContractAtViewMethod, self._address, state, catch_vm_error
+		)
+
+	def emit(
+		self,
+		*,
+		value: u256 = 0,
+		on: ON = 'finalized',
+		use_balance: bool = False,
+		fee_params: InternalMessageParams | None = None,
+	) -> ErasedMethods:
+		return _ContractAtGetter(
+			_ContractAtEmitMethod, self._address, value, on, use_balance, fee_params
+		)
+
+	def emit_transfer(
+		self,
+		value: u256,
+		*,
+		on: ON = 'finalized',
+		use_balance: bool = False,
+		fee_params: InternalMessageParams | None = None,
+	) -> None:
+		if value <= 0:
+			raise ValueError('value must be greater than 0 for emit_transfer')
+		_ContractAtEmitMethod(None, self._address, value, on, use_balance, fee_params)()
+
+	@property
+	def balance(self) -> u256:
+		return wasi.get_balance(self._address.as_bytes)
+
+
+def get_at(address: Address, /) -> Proxy:
+	"""
+	Create a proxy object for interacting with a deployed GenVM contract.
+
+	This function returns a contract proxy that provides runtime access to
+	the methods of a deployed contract without requiring type annotations describing
+	its interface.
+
+	:param address: Address of the deployed contract
+	:returns: ContractProxy object for interacting with the contract
+
+	Example:
+		>>> addr = Address('0x1234567890abcdef...')
+		>>> contract = get_at(addr)
+		>>> result = contract.view().some_view_method(arg1, arg2)
+		>>> contract.emit(value=100).some_write_method(arg1)
+	"""
+	return _ContractAt(address)
+
+
+_ContractAtGetter_P = typing.ParamSpec('_ContractAtGetter_P')
+
+
+class _ContractAtGetter[T]:
+	__slots__ = ('_args', '_ctor', '_kwargs')
+
+	def __init__(
+		self,
+		ctor: typing.Callable[typing.Concatenate[str, _ContractAtGetter_P], T],
+		*args: _ContractAtGetter_P.args,
+		**kwargs: _ContractAtGetter_P.kwargs,
+	):
+		self._ctor = ctor
+		self._args = args
+		self._kwargs = kwargs
+
+	def __getattr__(self, name: str) -> T:
+		return self._ctor(name, *self._args, **self._kwargs)
+
+
+@typing.runtime_checkable
+class GenVMContractDeclaration[TView, TWrite](typing.Protocol):
+	"""
+	Protocol for defining contract interface declarations.
+
+	This protocol is used with the `@gl.contract.interface` decorator to create
+	type-safe interfaces for interacting with specific contract types.
+
+	:param TView: Type containing view method declarations
+	:param TWrite: Type containing write method declarations
+
+	Example:
+		>>> @gl.contract.interface
+		>>> class MyContract:
+		>>>     class View:
+		>>>         def get_balance(self, user: Address) -> u256: ...
+		>>>         def get_name(self) -> str: ...
+		>>>
+		>>>     class Write:
+		>>>         def transfer(self, to: Address, amount: u256) -> None: ...
+		>>>         def mint(self, to: Address, amount: u256) -> None: ...
+	"""
+
+	View: type[TView]
+	"""
+	Class containing declarations for all view (read-only) methods.
+
+	All methods should be annotated with their expected return types.
+	"""
+
+	Write: type[TWrite]
+	"""
+	Class containing declarations for all write (state-modifying) methods.
+
+	All methods must have return type annotations of either None or be omitted.
+	"""
+
+
+def interface[TView, TWrite](
+	_declaration: GenVMContractDeclaration[TView, TWrite],
+	/,
+) -> typing.Callable[[Address], Proxy[TView, TWrite]]:
+	# editorconfig-checker-disable
+	"""
+	Decorator for creating type-safe contract interfaces.
+
+	This decorator creates a factory function that returns strongly-typed
+	contract proxies, enabling IDE autocompletion and static type checking
+	for contract interactions.
+
+	:param _contr: Contract declaration class with View and Write nested classes
+	:returns: Factory function that creates typed contract proxies
+
+	Example:
+		>>> @gl.contract.interface
+		>>> class ERC20Contract:
+		>>>     class View:
+		>>>         def balance_of(self, owner: Address) -> u256: ...
+		>>>         def total_supply(self) -> u256: ...
+		>>>
+		>>>     class Write:
+		>>>         def transfer(self, to: Address, amount: u256) -> None: ...
+		>>>         def approve(self, spender: Address, amount: u256) -> None: ...
+		>>>
+		>>> # Usage:
+		>>> token = ERC20Contract(token_address)
+		>>> balance = token.view().balance_of(user_address)  # Fully typed!
+		>>> token.emit().transfer(recipient, amount)
+
+	.. note::
+		This decorator provides no runtime functionality - it's purely for
+		type safety and developer experience. The actual contract interaction
+		uses the same runtime mechanisms as `get_at`.
+	"""
+	# editorconfig-checker-enable
+	return get_at
+
+
+from genlayer.types import u256  # noqa: E402
+
+
+@typing.overload
+def deploy(
+	*,
+	code: bytes,
+	args: collections.abc.Sequence[calldata.Encodable] = [],
+	kwargs: collections.abc.Mapping[str, calldata.Encodable] = {},
+	salt_nonce: typing.Literal[0] = 0,
+	value: u256 = 0,
+	on: ON = 'finalized',
+	use_balance: bool = False,
+	fee_params: InternalMessageParams | None = None,
+) -> None: ...
+
+
+@typing.overload
+def deploy(
+	*,
+	code: bytes,
+	args: collections.abc.Sequence[calldata.Encodable] = [],
+	kwargs: collections.abc.Mapping[str, calldata.Encodable] = {},
+	salt_nonce: u256,
+	value: u256 = 0,
+	on: ON = 'finalized',
+	use_balance: bool = False,
+	fee_params: InternalMessageParams | None = None,
+) -> Address: ...
+
+
+def deploy(
+	*,
+	code: bytes,
+	args: collections.abc.Sequence[calldata.Encodable] = [],
+	kwargs: collections.abc.Mapping[str, calldata.Encodable] = {},
+	salt_nonce: u256 | typing.Literal[0] = 0,
+	value: u256 = 0,
+	on: ON = 'finalized',
+	use_balance: bool = False,
+	fee_params: InternalMessageParams | None = None,
+) -> Address | None:
+	"""
+	Deploy a new GenVM contract to the blockchain.
+
+	This function deploys a new contract using the provided ``code`` and
+	constructor arguments. The deployment address can be deterministic (with a salt)
+	or non-deterministic.
+
+	:param code: Source code of the contract to deploy. It can be regular Python code. See :ref:`runners-reference` for more information
+	:param args: Positional arguments for the contract constructor
+	:param kwargs: Keyword arguments for the contract constructor
+	:param salt_nonce: Salt for deterministic deployment. Use 0 for non-deterministic.
+	:param value: Amount of native tokens to send to the contract during deployment
+	:param on: When to execute the deployment ('decided' or 'finalized')
+	:param use_balance: Fund the deploy message fee from this contract's balance; see :py:meth:`Proxy.emit`
+	:param fee_params: Fee parameters for the balance-funded fee; required when ``use_balance`` is set
+	:returns: Contract address if salt_nonce != 0, None otherwise
+
+	Example:
+		>>> # Non-deterministic deployment
+		>>> deploy(
+		>>>     code=contract_source_str.encode('utf-8'),
+		>>>     args=[initial_supply],
+		>>>     kwargs={"name": "MyToken", "symbol": "MTK"}
+		>>> )
+		>>>
+		>>> # Deterministic deployment
+		>>> address = deploy(
+		>>>     code=contract_source_zip_as_bytes,
+		>>>     args=[initial_supply],
+		>>>     salt_nonce=12345,
+		>>>     value=1000  # Send 1000 native tokens
+		>>> )
+		>>> print(f'Contract deployed at: {address}')
+
+	.. note::
+		- For deterministic deployments (salt_nonce != 0), the contract address
+			is computed using CREATE2 and is returned immediately
+		- For non-deterministic deployments (salt_nonce == 0), the address is
+			assigned by the consensus and not returned. Considering asynchronous nature
+			of GenLayer consensus the address should not be predicted
+		- The contract's constructor will be called with the provided ``args`` and ``kwargs``
+		- Refer to consensus documentation for CREATE2 address derivation process and
+			details about transaction ordering
+	"""
+
+	message: dict[str, calldata.Encodable] = {
+		'calldata': _make_calldata_obj(None, args, kwargs),
+		'code': code,
+		'value': value,
+		'on': on,
+		'salt_nonce': salt_nonce,
+	}
+	if use_balance:
+		message['use_balance'] = True
+	if fee_params is not None:
+		message['fee_params'] = fee_params
+	wasi.gl_call(calldata.encode({'EmitInternalDeployMessage': message}))
+
+	if salt_nonce == 0:
+		return None
+
+	import genlayer.message as _message
+	from genlayer._internal import create2_address
+
+	return create2_address(_message.contract_address, salt_nonce, _message.chain_id)
+
+
+class Contract(IAccount):
+	"""
+	Class for declaring main GenVM contract.
+
+	This class must be inherited by user contracts to be deployable on GenVM.
+	It provides essential contract functionality including balance access,
+	address information, and storage proxying.
+
+	Only one ``Contract`` subclass is allowed per module. The class automatically
+	generates storage management code and registers itself as the main contract.
+
+	Example:
+		>>> import genlayer as gl
+		>>>
+		>>> class MyContract(gl.contract.Contract):
+		>>>     def __init__(self, initial_value: int):
+		>>>         self.value = initial_value
+		>>>
+		>>>     @gl.public.view
+		>>>     def get_value(self) -> int:
+		>>>         return self.value
+		>>>
+		>>>     @gl.public.write
+		>>>     def set_value(self, new_value: int):
+		>>>         self.value = new_value
+
+	.. warning::
+		Only one Contract subclass is allowed per Python module. Attempting
+		to define multiple Contract subclasses will raise a TypeError.
+	"""
+
+	def __init_subclass__(cls) -> None:
+		"""
+		Initialize the contract subclass and register it as the main contract.
+
+		:raises TypeError: If another Contract subclass already exists in this module
+		"""
+		global __known_contract__
+		if __known_contract__ is not None:
+			raise TypeError(
+				f'only one contract is allowed; first: `{__known_contract__}` second: `{cls}`'
+			)
+
+		cls.__gl_contract__ = True
+		from genlayer.storage._internal.generate import generate_storage
+
+		generate_storage(cls)
+		__known_contract__ = cls
+
+	@property
+	def balance(self) -> u256:
+		return wasi.get_self_balance()
+
+	@property
+	def address(self) -> Address:
+		import genlayer.message as message
+
+		return message.contract_address
+
+	def emit_transfer(self, value: u256, *, on: ON = 'finalized') -> None:
+		import warnings
+
+		warnings.warn('Emitting transfer to self without data makes little sense')
+		from genlayer.contract import get_at
+
+		get_at(self.address).emit_transfer(value, on=on)
+
+	def __handle_undefined_method__(
+		self, method_name: str, args: list[typing.Any], kwargs: dict[str, typing.Any]
+	):
+		"""
+		Handle calls to undefined methods.
+
+		This method is called when a message is sent to the contract with a method
+		name that doesn't exist. If it is overridden, it must be either a ``gl.public.write``
+		or ``gl.public.write.payable`` method.
+
+		:param method_name: Name of the method that was called
+		:param args: Positional arguments passed to the method
+		:param kwargs: Keyword arguments passed to the method
+		:raises NotImplementedError: Must be implemented by subclasses if used
+
+		Example:
+			>>> class MyContract(gl.contract.Contract):
+			>>>     @gl.public.write
+			>>>     def __handle_undefined_method__(self, method_name: str, args: list, kwargs: dict):
+			>>>         if method_name == "fallback_method":
+			>>>             self.handle_fallback(args, kwargs)
+			>>>         else:
+			>>>             raise ValueError(f"Unknown method: {method_name}")
+		"""
+		raise NotImplementedError()
+
+	def __receive__(self):
+		"""
+		Handle plain value transfers to this contract.
+
+		This method is called when native tokens are sent to the contract
+		without calling any specific method. It must be implemented as a
+		public payable write method.
+
+		:raises NotImplementedError: Must be implemented by subclasses if used
+
+		Example:
+			>>> class MyContract(gl.contract.Contract):
+			>>>     @gl.public.write.payable
+			>>>     def __receive__(self):
+			>>> # Handle incoming transfers
+			>>>         sender = gl.message.sender
+			>>>         value = gl.message.value
+			>>>         self.total_received += value
+		"""
+		raise NotImplementedError()
+
+	@classmethod
+	def __get_schema__(cls) -> str:
+		"""
+		Generate and return the JSON schema for this contract.
+
+		This method analyzes the contract class and generates a JSON schema
+		describing its public interface, including all public methods and
+		their type signatures.
+
+		:returns: JSON string containing the contract schema
+
+		.. note::
+			This method is used internally by the GenVM runtime for
+			contract introspection and interface generation
+		"""
+		import genlayer._internal.get_schema as _get_schema
+
+		res = _get_schema.get_schema(cls)
+		return json.dumps(res, separators=(',', ':'))
+
+
+Contract.__handle_undefined_method__.__isabstractmethod__ = True  # type: ignore
+Contract.__receive__.__isabstractmethod__ = True  # type: ignore
+
+__known_contract__: type[Contract] | None = None
