@@ -20,6 +20,13 @@ import type {
 import { verificationStore } from "@/lib/store/verification-store";
 import { runVerificationEngine } from "@/lib/verifier/engine";
 import { validateResultSchema } from "@/lib/verifier/schema";
+import { normalizeOnChainResult } from "@/lib/genlayer/verifier";
+import {
+  STUDIO_NEXT_NETWORK_NAME,
+  finalizeStudioNextVerification,
+  studioNextExplorerUrl,
+} from "@/lib/genlayer/studionext";
+import { toOnChainRequestJson } from "@/lib/verifier/serialize";
 import {
   GenLayerCapacityError,
   finalizeVerificationTransaction,
@@ -258,16 +265,42 @@ function buildVerificationRequest(verification: Verification) {
  * finalization (that exceeds serverless time limits); the client then polls
  * finalizeVerify() to resume waiting on the same hash.
  */
+/**
+ * Descriptor returned when the configured network signs in the browser
+ * wallet (Studio Next). The client must submit the `verify` write itself
+ * and post the real returned transaction hash to /verify-hash.
+ */
+export interface WalletSigningDescriptor {
+  required: true;
+  contractAddress: string;
+  verificationId: string;
+  requestJson: string;
+}
+
+function buildWalletSigning(
+  config: NonNullable<ReturnType<typeof getGenLayerConfig>>,
+  verification: Verification,
+  id: string,
+): WalletSigningDescriptor {
+  return {
+    required: true,
+    contractAddress: config.contractAddress,
+    verificationId: id,
+    requestJson: toOnChainRequestJson(buildVerificationRequest(verification)),
+  };
+}
+
 export async function startVerify(
   id: string,
   snapshot?: unknown,
-): Promise<{ verification: Verification; transactionHash?: string }> {
+): Promise<{ verification: Verification; transactionHash?: string; walletSigning?: WalletSigningDescriptor }> {
   const verification = (await verificationStore.get(id)) ?? (await restoreVerification(id, snapshot, ["SUBMITTED"]));
   if (!verification) throw new ValidationError("Verification not found.");
   if (!verification.deliverable) {
     throw new ValidationError("No deliverable submitted yet.");
   }
-  if (!getGenLayerConfig()) {
+  const genConfig = getGenLayerConfig();
+  if (!genConfig) {
     throw new ValidationError("GenLayer is not configured for live verification.");
   }
 
@@ -275,6 +308,13 @@ export async function startVerify(
   if (verification.status === "VERIFYING") {
     if (verification.txHash) {
       return { verification, transactionHash: verification.txHash };
+    }
+    // Studio Next wallet signing may have been rejected by the user before
+    // any transaction existed; nothing was broadcast, so re-arming the
+    // signing descriptor cannot double-submit. Bradbury keeps the strict
+    // refusal because its submission outcome is server-side and unknown.
+    if (genConfig.network === STUDIO_NEXT_NETWORK_NAME) {
+      return { verification, walletSigning: buildWalletSigning(genConfig, verification, id) };
     }
     throw new ValidationError(
       "This verification is already in progress but has no recorded transaction hash. " +
@@ -284,6 +324,15 @@ export async function startVerify(
 
   const request = buildVerificationRequest(verification);
   await verificationStore.update(id, { status: "VERIFYING" });
+
+  // Studio Next (chain 61997) signs in the BROWSER WALLET per the RC stack's
+  // deployment flow: the server persists no signing key for this network and
+  // returns the exact payload the wallet must sign. The client posts the real
+  // returned hash to /verify-hash, which resumes the standard VERIFYING flow.
+  // No transaction is submitted here and no hash is fabricated.
+  if (genConfig.network === STUDIO_NEXT_NETWORK_NAME) {
+    return { verification, walletSigning: buildWalletSigning(genConfig, verification, id) };
+  }
 
   try {
     const txHash = await submitVerificationTransaction(id, request);
@@ -327,6 +376,32 @@ export async function finalizeVerify(
   }
 
   try {
+    // Studio Next finalization is keyless and reads the raw record through the
+    // RC SDK; result normalization is shared with the Bradbury path below.
+    if (getGenLayerConfig()?.network === STUDIO_NEXT_NETWORK_NAME) {
+      const genConfig = getGenLayerConfig();
+      if (!genConfig) throw new ValidationError("GenLayer is not configured.");
+      const { stored } = await finalizeStudioNextVerification({
+        contractAddress: genConfig.contractAddress,
+        verificationId: id,
+        txHash: verification.txHash,
+      });
+      const result = normalizeOnChainResult(stored, id);
+      validateResultSchema(result);
+      result.tx = {
+        mode: "genlayer",
+        transactionHash: verification.txHash,
+        contractAddress: genConfig.contractAddress,
+        network: STUDIO_NEXT_NETWORK_NAME,
+        status: "FINALIZED",
+        explorerUrl: studioNextExplorerUrl(verification.txHash),
+      };
+      const status = result.decision === "PASS" ? "PASSED" : "FAILED";
+      const updated = await verificationStore.update(id, { status, result });
+      if (!updated) throw new ValidationError("Verification not found.");
+      return { verification: updated, result };
+    }
+
     const live = await finalizeVerificationTransaction(id, verification.txHash);
     const result = live.result;
     if (live.tx) result.tx = live.tx;

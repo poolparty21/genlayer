@@ -31,7 +31,20 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
     // Live mode: submit the transaction and return immediately (202). The
     // client polls /finalize to resume waiting on the persisted hash. This
     // avoids blocking a serverless request on GenLayer's slow finalization.
-    const { transactionHash } = await startVerify(id, body?.verification);
+    const { transactionHash, walletSigning } = await startVerify(id, body?.verification);
+    if (walletSigning?.required) {
+      // Studio Next: the browser wallet signs the write. The server submitted
+      // nothing; the client posts the real returned hash to /verify-hash.
+      return NextResponse.json(
+        {
+          status: "VERIFYING",
+          mode: "genlayer",
+          walletSigning,
+          genlayer: { configured: true, network: genConfig.network },
+        },
+        { status: 202 },
+      );
+    }
     return NextResponse.json(
       { status: "VERIFYING", transactionHash, mode: "genlayer", genlayer: { configured: true, network: genConfig.network } },
       { status: 202 },
