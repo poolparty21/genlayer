@@ -1,0 +1,16 @@
+{
+  "name": "agentzproof-deploy-studionext",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Isolated browser-wallet deployment utility for AgentzProofVerifier on Studio Next (chain 61997) using the matching genlayer-js 2.0.0-rc.1 RC SDK. The Bradbury 4221 deployment path (scripts/deploy-browser.ts + genlayer-js 1.1.8) remains untouched.",
+  "scripts": {
+    "build": "esbuild src/deploy-studionext.ts --bundle --format=iife --loader:.py=text --outfile=deploy.bundle.js",
+    "serve": "python3 -m http.server 8642"
+  },
+  "dependencies": {
+    "genlayer-js": "2.0.0-rc.1"
+  },
+  "devDependencies": {
+    "esbuild": "^0.25.0"
+  }
+}

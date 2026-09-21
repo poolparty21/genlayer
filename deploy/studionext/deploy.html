@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>AgentzProof — Studio Next (61997) deployment</title>
+    <style>
+      body { font-family: system-ui, sans-serif; max-width: 42rem; margin: 3rem auto; padding: 0 1rem; }
+      pre { background: #f4f4f5; padding: 1rem; border-radius: 8px; overflow: auto; }
+      button { padding: 0.6rem 1.2rem; font-size: 1rem; cursor: pointer; }
+      .warn { color: #b45309; }
+    </style>
+  </head>
+  <body>
+    <h1>AgentzProof — Studio Next deployment</h1>
+    <p class="warn">
+      Target: <strong>GenLayer Studio Devnet (chain 61997 / 0xf22d)</strong> —
+      RPC <code>https://studio-dev.genlayer.com/api</code>. Switch your wallet to
+      this chain before deploying. This submits exactly one deployment transaction
+      and never retries automatically.
+    </p>
+    <p>
+      <button id="addnet">1. Add / switch wallet to Studio Next (61997)</button>
+      <button id="deploy">2. Deploy AgentzProofVerifier</button>
+      <button id="resume">Resume pending deployment by hash</button>
+    </p>
+    <p style="color:#555">
+      Need test GEN for gas? Faucet: <code>faucet.genlayer.foundation</code>.
+      Studio-dev is a temporary preview chain (official docs: expect resets).
+    </p>
+    <pre id="out">Open the browser console (F12) for the full deployment log.</pre>
+    <script src="./deploy.bundle.js"></script>
+    <script>
+      const out = document.getElementById("out");
+      const show = (label, value) => {
+        out.textContent += `\n${label}: ${JSON.stringify(value, (k, v) => (typeof v === "bigint" ? String(v) : v))}`;
+      };
+      // Network parameters from official GenLayer sources: chain id and RPC from
+      // docs.genlayer.com (network-configuration) and the genlayer-js RC SDK
+      // studioDevnet definition; currency symbol GEN per the official
+      // genlayer-wallet README. No block explorer exists for this chain.
+      const STUDIONEXT_PARAMS = {
+        chainId: "0xf22d",
+        chainName: "GenLayer Studio Devnet (Studio Next)",
+        rpcUrls: ["https://studio-dev.genlayer.com/api"],
+        nativeCurrency: { name: "GenLayer", symbol: "GEN", decimals: 18 },
+      };
+      document.getElementById("addnet").onclick = async () => {
+        try {
+          const eth = window.ethereum;
+          if (!eth) throw new Error("No EIP-1193 wallet provider found (install/enable MetaMask).");
+          show("ADDNET", await eth.request({ method: "wallet_addEthereumChain", params: [STUDIONEXT_PARAMS] }));
+          show("SWITCHED_CHAIN", await eth.request({ method: "eth_chainId" }));
+        } catch (e) {
+          show("ADDNET_ERROR", String(e && e.message ? e.message : e));
+        }
+      };
+      document.getElementById("deploy").onclick = async () => {
+        try {
+          show("RESULT", await window.deployAgentzProofStudioNext());
+        } catch (e) {
+          show("ERROR", String(e && e.message ? e.message : e));
+        }
+      };
+      document.getElementById("resume").onclick = async () => {
+        try {
+          show("RESULT", await window.deployAgentzProofStudioNext());
+        } catch (e) {
+          show("ERROR", String(e && e.message ? e.message : e));
+        }
+      };
+    </script>
+  </body>
+</html>
