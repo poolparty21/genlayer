@@ -1,0 +1,47 @@
+
+> frontend@0.1.0 dev
+> next dev
+
+▲ Next.js 16.3.4 (Turbopack)
+- Local:         http://localhost:3010
+- Network:       http://10.1.46.166:3010
+- Environments: .env.local
+✓ Ready in 1065ms
+✓ Running next.config.ts took 63ms
+
+ GET /verify/8add5c56-0278-4c3b-a606-d3bb17b90472 200 in 1437ms (next.js: 1163ms, application-code: 274ms)
+ GET /api/verifications/8add5c56-0278-4c3b-a606-d3bb17b90472 404 in 1182ms (next.js: 1148ms, application-code: 35ms)
+ GET / 200 in 113ms (next.js: 29ms, application-code: 84ms)
+ POST /api/verifications 201 in 229ms (next.js: 143ms, application-code: 86ms)
+ POST /api/verifications/b9d30193-4403-49b6-9df9-581ab7a37e8f/submit 200 in 1170ms (next.js: 1157ms, application-code: 14ms)
+ POST /api/verifications/b9d30193-4403-49b6-9df9-581ab7a37e8f/verify 202 in 1167ms (next.js: 1151ms, application-code: 16ms)
+ GET /verify/b9d30193-4403-49b6-9df9-581ab7a37e8f 200 in 158ms (next.js: 24ms, application-code: 135ms)
+ GET /api/verifications/b9d30193-4403-49b6-9df9-581ab7a37e8f 200 in 30ms (next.js: 16ms, application-code: 14ms)
+ POST /api/verifications/b9d30193-4403-49b6-9df9-581ab7a37e8f/verify 202 in 29ms (next.js: 16ms, application-code: 14ms)
+ GET /verify/b9d30193-4403-49b6-9df9-581ab7a37e8f 200 in 74ms (next.js: 16ms, application-code: 58ms)
+ GET /api/verifications/b9d30193-4403-49b6-9df9-581ab7a37e8f 200 in 26ms (next.js: 15ms, application-code: 10ms)
+ POST /api/verifications/b9d30193-4403-49b6-9df9-581ab7a37e8f/verify 202 in 27ms (next.js: 14ms, application-code: 13ms)
+ GET /verify/b9d30193-4403-49b6-9df9-581ab7a37e8f 200 in 91ms (next.js: 18ms, application-code: 73ms)
+ GET /api/verifications/b9d30193-4403-49b6-9df9-581ab7a37e8f 200 in 33ms (next.js: 16ms, application-code: 17ms)
+ POST /api/verifications/b9d30193-4403-49b6-9df9-581ab7a37e8f/verify 202 in 30ms (next.js: 16ms, application-code: 14ms)
+✓ Compiled in 544ms
+ GET /verify/8add5c56-0278-4c3b-a606-d3bb17b90472 200 in 141ms (next.js: 93ms, application-code: 47ms)
+ GET /verify/b9d30193-4403-49b6-9df9-581ab7a37e8f 200 in 135ms (next.js: 40ms, application-code: 94ms)
+ POST /api/verifications/b9d30193-4403-49b6-9df9-581ab7a37e8f/verify-hash 202 in 1534ms (next.js: 1520ms, application-code: 14ms)
+ POST /api/verifications/b9d30193-4403-49b6-9df9-581ab7a37e8f/finalize 502 in 45s (next.js: 1740ms, application-code: 43s)
+ GET /api/verifications/b9d30193-4403-49b6-9df9-581ab7a37e8f 200 in 33ms (next.js: 23ms, application-code: 10ms)
+ POST /api/verifications 201 in 29ms (next.js: 17ms, application-code: 12ms)
+ POST /api/verifications/f0f3b22d-3879-4236-a327-9db10dcdfc6e/submit 200 in 27ms (next.js: 15ms, application-code: 12ms)
+ POST /api/verifications/f0f3b22d-3879-4236-a327-9db10dcdfc6e/verify 202 in 26ms (next.js: 17ms, application-code: 9ms)
+ GET /verify/f0f3b22d-3879-4236-a327-9db10dcdfc6e 200 in 94ms (next.js: 25ms, application-code: 69ms)
+ GET /api/verifications/f0f3b22d-3879-4236-a327-9db10dcdfc6e 200 in 28ms (next.js: 18ms, application-code: 10ms)
+ POST /api/verifications/f0f3b22d-3879-4236-a327-9db10dcdfc6e/verify 202 in 31ms (next.js: 16ms, application-code: 15ms)
+ POST /api/verifications/f0f3b22d-3879-4236-a327-9db10dcdfc6e/verify-hash 202 in 24ms (next.js: 13ms, application-code: 11ms)
+ GET /api/verifications/f0f3b22d-3879-4236-a327-9db10dcdfc6e 200 in 25ms (next.js: 14ms, application-code: 11ms)
+ POST /api/verifications/f0f3b22d-3879-4236-a327-9db10dcdfc6e/finalize 502 in 34.1s (next.js: 14ms, application-code: 34.1s)
+✓ Compiled in 121ms
+ GET /verify/f0f3b22d-3879-4236-a327-9db10dcdfc6e 200 in 119ms (next.js: 29ms, application-code: 89ms)
+ GET /verify/b9d30193-4403-49b6-9df9-581ab7a37e8f 200 in 118ms (next.js: 59ms, application-code: 59ms)
+ POST /api/verifications/f0f3b22d-3879-4236-a327-9db10dcdfc6e/finalize 200 in 4.6s (next.js: 19ms, application-code: 4.6s)
+ GET /api/verifications/f0f3b22d-3879-4236-a327-9db10dcdfc6e 200 in 23ms (next.js: 13ms, application-code: 10ms)
+ POST /api/verifications/f0f3b22d-3879-4236-a327-9db10dcdfc6e/finalize 200 in 21ms (next.js: 12ms, application-code: 9ms)

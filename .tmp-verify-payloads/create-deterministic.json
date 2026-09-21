@@ -1,0 +1,29 @@
+{
+  "title": "Studio Next on-chain verification — hello_world (deterministic checks)",
+  "description": "A real end-to-end verification through the published AgentzProof app flow on GenLayer Studio Next (chain 61997), with consensus-friendly requirements: every requirement is checked deterministically by the contract (identical on every validator), so the on-chain decision converges and is stored.",
+  "task": "Implement and submit a Python function hello_world() that returns exactly the string 'Hello, GenLayer!'. Submit the function source as the deliverable code.",
+  "requirements": [
+    {
+      "id": "REQ-1",
+      "text": "The deliverable defines a function named hello_world.",
+      "check": { "type": "function_exists", "name": "hello_world" }
+    },
+    {
+      "id": "REQ-2",
+      "text": "The deliverable contains the exact required return value 'Hello, GenLayer!'.",
+      "check": { "type": "string_present", "needle": "Hello, GenLayer!" }
+    },
+    {
+      "id": "REQ-3",
+      "text": "The submitter's test run reports the function executed and returned the expected string.",
+      "check": { "type": "reported", "passed": true, "evidence": "Local run: hello_world() returned 'Hello, GenLayer!' (exit code 0)." }
+    }
+  ],
+  "creator": "Gen. Dave deployment verification",
+  "agent": "studio-next-demo-agent",
+  "reward": "0 GEN (Studio Next testnet)",
+  "deadline": "",
+  "evidenceRequirements": [
+    "Submitted function source is included in the deliverable code field."
+  ]
+}

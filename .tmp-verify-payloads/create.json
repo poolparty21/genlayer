@@ -1,0 +1,23 @@
+{
+  "title": "Studio Next on-chain verification — hello_world deliverable",
+  "description": "A real end-to-end verification run through the published AgentzProof app flow, submitted to the AgentzProofVerifier contract deployed on GenLayer Studio Next (chain 61997). Deterministic requirement REQ-1 is checked byte-for-byte by the contract; REQ-2 goes to GenLayer LLM consensus (leader/validator).",
+  "task": "Implement and submit a Python function hello_world() that returns exactly the string 'Hello, GenLayer!'. Submit the function source as the deliverable code.",
+  "requirements": [
+    {
+      "id": "REQ-1",
+      "text": "The deliverable defines a function named hello_world that returns the exact string 'Hello, GenLayer!'.",
+      "check": { "type": "function_exists", "name": "hello_world" }
+    },
+    {
+      "id": "REQ-2",
+      "text": "The hello_world implementation is simple, documented with a short docstring or comment, and contains no network, file, or subprocess access."
+    }
+  ],
+  "creator": "Gen. Dave deployment verification",
+  "agent": "studio-next-demo-agent",
+  "reward": "0 GEN (Studio Next testnet)",
+  "deadline": "",
+  "evidenceRequirements": [
+    "Submitted function source is included in the deliverable code field."
+  ]
+}
