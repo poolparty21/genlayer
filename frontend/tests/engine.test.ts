@@ -121,19 +121,26 @@ describe("verification engine", () => {
     expect(fetched.length).toBe(0);
   });
 
-  it("unreachable http_status check fails deterministically", async () => {
-    const request = passwordResetRequest(true);
-    request.requirements.push({
-      id: "REQ-7",
-      text: "Status page is reachable.",
-      check: { type: "http_status", url: "https://example.invalid/status" },
-    });
-    const result = await runVerificationEngine(request, { verificationId: "t-http", mode: "demo" });
-    expect(result.decision).toBe("FAIL");
-    const req7 = result.requirements.find((r) => r.id === "REQ-7")!;
-    expect(req7.status).toBe("FAIL");
-    expect(req7.checkedBy).toBe("deterministic");
-  });
+  it(
+    "unreachable http_status check fails deterministically",
+    async () => {
+      const request = passwordResetRequest(true);
+      request.requirements.push({
+        id: "REQ-7",
+        text: "Status page is reachable.",
+        check: { type: "http_status", url: "https://example.invalid/status" },
+      });
+      const result = await runVerificationEngine(request, { verificationId: "t-http", mode: "demo" });
+      expect(result.decision).toBe("FAIL");
+      const req7 = result.requirements.find((r) => r.id === "REQ-7")!;
+      expect(req7.status).toBe("FAIL");
+      expect(req7.checkedBy).toBe("deterministic");
+    },
+    // The engine's own fetch timeout is 8s (FETCH_TIMEOUT_MS); give the
+    // runner headroom so the deterministic-FAIL path completes on hosts
+    // where DNS failure is slow. Assertions are unchanged.
+    12_000,
+  );
 
   it("missing deliverable fails the content checks", async () => {
     const request = passwordResetRequest(true);

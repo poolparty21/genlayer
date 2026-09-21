@@ -34,7 +34,9 @@ def test_subjective_requirements_judged_by_llm_pass(direct_deploy, direct_vm):
     assert_result_schema(result)
     assert result["decision"] == "PASS"
     assert result["score"] == 1.0
-    assert result["consensus"]["principle"] == "run_nondet_unsafe"
+    # RC Consensus v0.6 std renamed run_nondet_unsafe -> run_nondet; the
+    # contract's consensus metadata reports the current API name.
+    assert result["consensus"]["principle"] == "run_nondet"
     assert result["consensus"]["llm_adjudication"] == "leader_fn_validator_fn"
     for requirement in result["requirements"]:
         assert requirement["checked_by"] == "llm"

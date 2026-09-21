@@ -136,3 +136,33 @@ def build_research_request(llm_verdicts: dict) -> str:
         "metadata": {"creator": "demo-buyer", "agent": "research-agent", "submitted_at": "2026-09-05T00:00:00Z"},
     }
     return json.dumps(request)
+
+
+# ---------------------------------------------------------------------------
+# RC-SDK (genlayer-py 0.19 / Consensus v0.6) direct-mode host-semantics shim
+# ---------------------------------------------------------------------------
+# genlayer-test's direct-mode LLM mock pre-parses `response_format="json"`
+# responses into dicts — behavior written for the pre-RC std. The RC std's
+# `gl.nondet.exec_prompt` expects the host to return the raw model text and
+# parses JSON itself (`_decode_nondet_json`); pre-parsed dicts made the RC
+# leader fail with "JSON result is not text", surfacing as spurious FAILs.
+# A real Studio node returns raw text, so we restore RC host semantics for
+# the direct-mode mock only. Test expectations are NOT changed by this shim.
+try:  # direct mode only; environments without the direct runner skip this
+    from gltest.direct import wasi_mock as _wasi_mock
+except Exception:  # pragma: no cover
+    _wasi_mock = None
+
+if _wasi_mock is not None and not getattr(_wasi_mock, "_rc_json_passthrough", False):
+    _orig_handle_llm_request = _wasi_mock._handle_llm_request
+
+    def _handle_llm_request_rc(vm, data):
+        response = _orig_handle_llm_request(vm, data)
+        # RC host semantics: return raw text; the std parses JSON itself.
+        if isinstance(response, dict) and isinstance(response.get("ok"), dict):
+            response = dict(response)
+            response["ok"] = json.dumps(response["ok"])
+        return response
+
+    _wasi_mock._handle_llm_request = _handle_llm_request_rc
+    _wasi_mock._rc_json_passthrough = True

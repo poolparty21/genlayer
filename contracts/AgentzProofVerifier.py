@@ -1,4 +1,4 @@
-# { "Depends": "py-genlayer:1jb45aa8ynh2a9c9xn3b7qqh8sm5q93hwfp7jqmwsfhh8jpz09h6" }
+# { "Depends": "py-genlayer:5jycge4q8k23462jtb0b9fyey1s9qz928sz2nbrd9mg4sxqg2qng" }
 """AgentzProofVerifier — GenLayer Intelligent Contract.
 
 AgentzProof is a decentralized verification layer for AI-agent work.
@@ -27,7 +27,7 @@ B. WEB evidence       — non-deterministic (network) but canonicalized by the
    JSON. This strict_eq use is limited to web observations, never LLM output.
 
 C. SUBJECTIVE judgment — non-deterministic LLM reasoning, executed with
-   gl.vm.run_nondet_unsafe(leader_fn, validator_fn). The leader and validator
+   gl.vm.run_nondet(leader_fn, validator_fn). The leader and validator
    independently evaluate the request; consensus compares only the stable
    decision and per-requirement verdicts, never natural-language reasoning.
 
@@ -74,7 +74,7 @@ Result schema (returned and stored on-chain)
   "summary": str,
   "consensus": {
     "method": "equivalence_principle",
-    "principle": "run_nondet_unsafe",
+    "principle": "run_nondet",
     "judge": "genlayer_llm",
     "web_evidence": "strict_eq",
     "llm_adjudication": "leader_fn_validator_fn"
@@ -88,7 +88,11 @@ import json
 import re
 from dataclasses import dataclass
 
-from genlayer import *  # noqa: F401,F403  (gl, Address, TreeMap, u256, @allow_storage)
+import genlayer as gl  # RC Consensus v0.6 std: `import genlayer as gl` pattern
+# Storage types live in gl.storage on the RC std. `allow` is the gl.storage.allow
+# decorator, aliased to the name the RC linter's AST check recognizes.
+from genlayer.storage import allow as allow_storage
+from genlayer.storage import TreeMap
 
 # ---------------------------------------------------------------------------
 # Limits — keep payloads small and stable for consensus.
@@ -168,7 +172,7 @@ def _validate_llm_response(response, subjective: list):
     return _stable_llm_fields(response, subjective)
 
 
-@allow_storage
+@allow_storage  # gl.storage.allow — RC linter recognizes the aliased name
 @dataclass
 class VerificationRecord:
     """On-chain record of one adjudication."""
@@ -179,7 +183,7 @@ class VerificationRecord:
     created_at: str
 
 
-class AgentzProofVerifier(gl.Contract):
+class AgentzProofVerifier(gl.contract.Contract):
     """Adjudicates AI-agent deliverables against original agreements."""
 
     verifications: TreeMap[str, VerificationRecord]
@@ -263,7 +267,7 @@ class AgentzProofVerifier(gl.Contract):
                 "verification_version": "1.0",
                 "consensus": (
                     "equivalence_principle: web evidence strict_eq; "
-                    "LLM adjudication run_nondet_unsafe"
+                    "LLM adjudication run_nondet"
                 ),
                 "deterministic_checks": [
                     "string_present",
@@ -472,8 +476,11 @@ class AgentzProofVerifier(gl.Contract):
             validator_stable = _stable_llm_fields(validator_response, subjective)
             return validator_stable is not None and validator_stable == leader_stable
 
+        # RC Consensus v0.6 std: run_nondet (formerly run_nondet_unsafe) is an
+        # eager @_lazy_api call — it returns T directly and raises on failure,
+        # so the existing try/except and dict handling stay unchanged.
         try:
-            parsed = gl.vm.run_nondet_unsafe(leader_fn, validator_fn)
+            parsed = gl.vm.run_nondet(leader_fn, validator_fn)
         except Exception:
             parsed = {}
         return self._sanitize_verdicts(parsed, subjective)
@@ -673,7 +680,7 @@ class AgentzProofVerifier(gl.Contract):
             "summary": summary,
             "consensus": {
                 "method": "equivalence_principle",
-                "principle": "run_nondet_unsafe",
+                "principle": "run_nondet",
                 "judge": "genlayer_llm",
                 "web_evidence": "strict_eq",
                 "llm_adjudication": "leader_fn_validator_fn",
