@@ -381,11 +381,59 @@ export async function finalizeVerify(
     if (getGenLayerConfig()?.network === STUDIO_NEXT_NETWORK_NAME) {
       const genConfig = getGenLayerConfig();
       if (!genConfig) throw new ValidationError("GenLayer is not configured.");
-      const { stored } = await finalizeStudioNextVerification({
+      const { stored, consensusOutcome } = await finalizeStudioNextVerification({
         contractAddress: genConfig.contractAddress,
         verificationId: id,
         txHash: verification.txHash,
       });
+
+      if (consensusOutcome === "MAJORITY_DISAGREE") {
+        // Terminal, successful consensus outcome: validators executed the
+        // contract but did not converge, and nothing is stored by design.
+        // Persist it as a first-class DIVERGED result (never an error), so
+        // the UI can present the divergence with its on-chain evidence.
+        const result: VerificationResult = {
+          verificationId: id,
+          verificationVersion: "1.0",
+          decision: "FAIL",
+          score: 0,
+          requirements: verification.requirements.map((req) => ({
+            id: req.id,
+            requirement: req.text,
+            status: "FAIL" as const,
+            checkedBy: "llm" as const,
+            reason:
+              "Consensus diverged: validators' independent judgments did not match, so no requirement verdict was stored on-chain.",
+          })),
+          evidence: [],
+          summary:
+            "On-chain consensus reached MAJORITY_DISAGREE — the validators executed the verification but their independent judgments did not converge, so the contract stores no result. This is a real network adjudication outcome, not an execution failure. Retry with more deterministic requirement checks (e.g. function_exists / string_present) to make validator agreement reproducible.",
+          consensus: {
+            method: "genlayer_llm",
+            principle: "equivalence_principle",
+            judge: "GenLayer validator consensus",
+            llmAdjudication:
+              "MAJORITY_DISAGREE across all consensus rotations — validator judgments diverged from the leader proposal.",
+          },
+          mode: "genlayer",
+          tx: {
+            mode: "genlayer",
+            transactionHash: verification.txHash,
+            contractAddress: genConfig.contractAddress,
+            network: STUDIO_NEXT_NETWORK_NAME,
+            status: "FINALIZED",
+            explorerUrl: studioNextExplorerUrl(verification.txHash),
+          },
+          verifiedAt: new Date().toISOString(),
+        };
+        const updated = await verificationStore.update(id, { status: "DIVERGED", result });
+        if (!updated) throw new ValidationError("Verification not found.");
+        return { verification: updated, result };
+      }
+
+      if (!stored) {
+        throw new ValidationError("On-chain record is empty after a converged consensus outcome.");
+      }
       const result = normalizeOnChainResult(stored, id);
       validateResultSchema(result);
       result.tx = {

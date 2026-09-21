@@ -6,6 +6,7 @@ const STATUS_STYLES: Record<VerificationStatus, { className: string; icon: strin
   VERIFYING: { className: "status-live", icon: "◌", label: "CHECKING" },
   PASSED: { className: "status-success", icon: "✓", label: "VERIFIED" },
   FAILED: { className: "status-danger", icon: "×", label: "FAILED" },
+  DIVERGED: { className: "status-warning", icon: "◈", label: "DIVERGED" },
 };
 
 export function StatusBadge({ status }: { status: VerificationStatus }) {

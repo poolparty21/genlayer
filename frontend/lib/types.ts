@@ -9,7 +9,8 @@ export type VerificationStatus =
   | "SUBMITTED"
   | "VERIFYING"
   | "PASSED"
-  | "FAILED";
+  | "FAILED"
+  | "DIVERGED";
 
 export type CheckType =
   | "string_present"

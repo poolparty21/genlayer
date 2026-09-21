@@ -172,15 +172,25 @@ export async function submitVerificationViaWallet(args: {
 /**
  * Server-side, keyless finalization: wait for FINALIZED, require successful
  * execution (not FINISHED_WITH_ERROR), then read the stored verification
- * record back from the contract. Returns the raw on-chain object —
- * normalization to the app result shape happens server-side in
- * lib/verifier/service.ts (shared with the Bradbury path).
+ * record back from the contract.
+ *
+ * MAJORITY_DISAGREE is a TERMINAL, SUCCESSFUL outcome — the validators ran,
+ * executed the contract, and voted; they simply did not converge, and the
+ * contract stores nothing by design. It is returned as structured data
+ * (`consensusOutcome: "MAJORITY_DISAGREE"`) so the app can present it as a
+ * divergence proof, never as a timeout-style error.
+ *
+ * Returns the raw on-chain object — normalization to the app result shape
+ * happens server-side in lib/verifier/service.ts (shared with Bradbury).
  */
 export async function finalizeStudioNextVerification(args: {
   contractAddress: string;
   verificationId: string;
   txHash: string;
-}): Promise<{ stored: Record<string, unknown> }> {
+}): Promise<
+  | { stored: Record<string, unknown>; consensusOutcome: "MAJORITY_AGREE" | string }
+  | { stored: undefined; consensusOutcome: "MAJORITY_DISAGREE" }
+> {
   const client = await createStudioNextClient();
 
   // Poll the raw JSON-RPC transaction record instead of the SDK's receipt
@@ -210,10 +220,12 @@ export async function finalizeStudioNextVerification(args: {
   if (executionResult === "FINISHED_WITH_ERROR") {
     throw new Error(`Contract execution failed: ${executionResult}`);
   }
-  if (txRecord.result_name === "MAJORITY_DISAGREE") {
-    throw new Error(
-      "Consensus reached MAJORITY_DISAGREE: validators' independent judgments did not match, so by design no result was stored on-chain.",
-    );
+
+  const consensusOutcome = String(txRecord.result_name ?? "");
+  if (consensusOutcome === "MAJORITY_DISAGREE") {
+    // Terminal divergence: nothing is stored on-chain by design. Return the
+    // outcome instead of attempting a read-back that would be empty.
+    return { stored: undefined, consensusOutcome };
   }
 
   const raw = await client.readContract({
@@ -236,7 +248,7 @@ export async function finalizeStudioNextVerification(args: {
         "(get_verification returned empty).",
     );
   }
-  return { stored: storedObj as Record<string, unknown> };
+  return { stored: storedObj as Record<string, unknown>, consensusOutcome };
 }
 
 export function studioNextExplorerUrl(txHash: string): string {
