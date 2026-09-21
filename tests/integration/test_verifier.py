@@ -20,7 +20,6 @@ import json
 from pathlib import Path
 
 import pytest
-from genlayer_py.types import TransactionStatus
 from gltest.clients import get_gl_client
 from gltest.accounts import get_default_account
 
@@ -43,7 +42,9 @@ def gl_account_fixture(default_account):
 def _deploy_contract(client, account, contract_path: str):
     """Deploy a GenLayer Intelligent Contract and return (address, client)."""
     code = Path(REPO_ROOT / contract_path).read_text(encoding="utf-8")
-    # deploy_contract returns a transaction hash; we wait for FINALIZED.
+    # deploy_contract returns a transaction hash; we wait for finalization.
+    # genlayer-py 0.19 RC: TransactionStatus was replaced by the
+    # lifecycle model — poll until the stored state is "finalized".
     tx_hash = client.deploy_contract(
         code=code,
         account=account,
@@ -51,8 +52,12 @@ def _deploy_contract(client, account, contract_path: str):
     )
     receipt = client.wait_for_transaction_receipt(
         tx_hash,
-        status=TransactionStatus.FINALIZED,
+        wait_until="finalized",
         retries=200,
+    )
+    lifecycle = receipt.get("lifecycle") or {}
+    assert lifecycle.get("state") == "finalized", (
+        f"Deployment did not finalize: {lifecycle}"
     )
     # Extract contract address: localnet uses receipt["data"]["contract_address"],
     # testnet uses receipt["tx_data_decoded"]["contract_address"]
@@ -71,10 +76,14 @@ def _call_verify(client, account, contract_address, verification_id, request_jso
         args=[verification_id, request_json],
         account=account,
     )
-    client.wait_for_transaction_receipt(
+    receipt = client.wait_for_transaction_receipt(
         tx_hash,
-        status=TransactionStatus.FINALIZED,
+        wait_until="finalized",
         retries=200,
+    )
+    lifecycle = receipt.get("lifecycle") or {}
+    assert lifecycle.get("state") == "finalized", (
+        f"Verification tx did not finalize: {lifecycle}"
     )
 
 
