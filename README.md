@@ -213,6 +213,30 @@ Deployment transaction: 0x61be412b8b8ab9a85cc8f1571781cb22a41326695f6f4ae147f023
 Do not redeploy this contract for normal frontend use. The frontend submits verification
 transactions to this existing address.
 
+### 3b. Studio Next (chain 61997) — on-chain evidence ledger
+
+AgentzProofVerifier is also deployed to **GenLayer Studio Devnet (Studio Next,
+61997 / 0xf22d, RPC `https://studio-dev.genlayer.com/api`)** — the Consensus
+v0.6 RC stack (genlayer-js 2.0.0-rc.1, genlayer-py 0.19.0rc2, genvm-universal
+v0.6.0-rc6, contract pin `py-genlayer:5jycge4q8k…`), deployed via the isolated
+browser-wallet flow in `deploy/studionext/`. Every value below is
+chain-returned and was independently re-verified against the canonical RPC.
+
+| Artifact | Tx hash | Outcome |
+|---|---|---|
+| **Contract deployment** (Sep 21) | [`0xc4a42255f728b71a881d9e20ed5c0d3f85e195cc938f95b7307f1c9674332076`](https://explorer-studio-dev.genlayer.com/tx/0xc4a42255f728b71a881d9e20ed5c0d3f85e195cc938f95b7307f1c9674332076) | FINALIZED · FINISHED_WITH_RETURN → contract [`0xEd091f5d891274864eAeE0f1E388dDa14e5ee1cE`](https://explorer-studio-dev.genlayer.com/address/0xEd091f5d891274864eAeE0f1E388dDa14e5ee1cE), RC pin verified in deployed code |
+| **PASS verification** (Sep 21) — ID `f0f3b22d-3879-4236-a327-9db10dcdfc6e`, deterministic checks, submitted through the app flow | [`0xdeaf14db37230f98a4de3b975c3f8d0f170bcc04096518bd07222e2433e1962a`](https://explorer-studio-dev.genlayer.com/tx/0xdeaf14db37230f98a4de3b975c3f8d0f170bcc04096518bd07222e2433e1962a) | FINALIZED · **MAJORITY_AGREE** · contract stores **PASS 3/3, score 1.0** |
+| **LLM divergence run** (Sep 21) — subjective requirement adjudicated by leader/validators | [`0x338cb850d8ebcedf10558e415021b5d164b114d1fd572a49f77ee1746975805d`](https://explorer-studio-dev.genlayer.com/tx/0x338cb850d8ebcedf10558e415021b5d164b114d1fd572a49f77ee1746975805d) | FINALIZED · **MAJORITY_DISAGREE** — nothing stored by design (genuine network adjudication) |
+| **Divergence panel live test** (Sep 22) — ID `39f815fb-adb4-4315-a804-2ece4a12eaaf`, deterministic REQ-1 PASS + subjective REQ-2 | [`0x1cd16f74930642362e3970a8d29e8a0124cfbbd93c8755a8fe2c6cef02042a26`](https://explorer-studio-dev.genlayer.com/tx/0x1cd16f74930642362e3970a8d29e8a0124cfbbd93c8755a8fe2c6cef02042a26) | FINALIZED · **MAJORITY_DISAGREE** — app renders the terminal DIVERGED proof panel |
+
+The two divergence runs are a feature, not a failure: they demonstrate the
+validators independently judging subjective requirements instead of
+rubber-stamping. The Bradbury 4221 path remains the published release; the
+Studio Next app wiring (`frontend/lib/genlayer/studionext.ts`, browser-wallet
+signing, keyless finalization) is isolated from it. Studio-dev is a temporary
+preview network — **expect resets**; see
+`deploy/studionext/REDEPLOY-RUNBOOK.md` for the restoration procedure.
+
 ### 4. Configure the frontend
 
 ```bash
