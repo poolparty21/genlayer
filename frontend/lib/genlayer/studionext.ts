@@ -25,6 +25,7 @@
 export const STUDIO_NEXT_CHAIN_ID = 61997;
 export const STUDIO_NEXT_CHAIN_ID_HEX = "0xf22d";
 export const STUDIO_NEXT_NETWORK_NAME = "studioDevnet";
+export const STUDIO_NEXT_RPC_URL = "https://studio-dev.genlayer.com/api";
 export const STUDIO_NEXT_EXPLORER_BASE = "https://explorer-studio-dev.genlayer.com";
 
 type Eip1193Provider = {
@@ -253,4 +254,105 @@ export async function finalizeStudioNextVerification(args: {
 
 export function studioNextExplorerUrl(txHash: string): string {
   return `${STUDIO_NEXT_EXPLORER_BASE}/tx/${txHash}`;
+}
+
+export function studioNextAddressExplorerUrl(address: string): string {
+  return `${STUDIO_NEXT_EXPLORER_BASE}/address/${address}`;
+}
+
+/** Live contract status as reported by the chain itself — no cached or hardcoded values. */
+export type StudioNextContractStatus = {
+  chainId: number | null;
+  chainIdHex: string | null;
+  contractAddress: string | null;
+  reachable: boolean;
+  contractName: string | null;
+  verificationCount: number | null;
+  error: string | null;
+  checkedAt: string;
+};
+
+async function rawStudioNextRpc(method: string, params: unknown[] = []): Promise<unknown> {
+  const res = await fetch(STUDIO_NEXT_RPC_URL, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params }),
+  });
+  if (!res.ok) throw new Error(`HTTP ${res.status} for ${method}`);
+  const body = (await res.json()) as { error?: unknown; result?: unknown };
+  if (body.error) throw new Error(`RPC error for ${method}: ${JSON.stringify(body.error)}`);
+  return body.result;
+}
+
+/**
+ * Probe the live Studio Next network with REAL reads only: raw JSON-RPC
+ * `eth_chainId` (independent of the SDK) plus two contract view calls
+ * (`get_contract_info`, `get_verification_ids`) through the RC SDK. Never
+ * throws — every failure becomes data so the status endpoint can always
+ * answer. Server-side use only (falls back to GENLAYER_CONTRACT_ADDRESS).
+ */
+export async function fetchStudioNextContractStatus(args?: {
+  contractAddress?: string;
+}): Promise<StudioNextContractStatus> {
+  const status: StudioNextContractStatus = {
+    chainId: null,
+    chainIdHex: null,
+    contractAddress: null,
+    reachable: false,
+    contractName: null,
+    verificationCount: null,
+    error: null,
+    checkedAt: new Date().toISOString(),
+  };
+
+  const contractAddress =
+    args?.contractAddress ?? process.env.GENLAYER_CONTRACT_ADDRESS?.trim();
+  if (contractAddress && /^0x[0-9a-fA-F]{40}$/.test(contractAddress)) {
+    status.contractAddress = contractAddress;
+  }
+
+  try {
+    const chainIdHex = await rawStudioNextRpc("eth_chainId");
+    if (typeof chainIdHex !== "string") {
+      throw new Error(`Unexpected eth_chainId response: ${String(chainIdHex)}`);
+    }
+    status.chainIdHex = chainIdHex;
+    status.chainId = Number.parseInt(chainIdHex, 16);
+    if (chainIdHex.toLowerCase() !== STUDIO_NEXT_CHAIN_ID_HEX) {
+      throw new Error(
+        `Chain id mismatch: expected ${STUDIO_NEXT_CHAIN_ID_HEX} (61997), got ${chainIdHex}`,
+      );
+    }
+    if (!status.contractAddress) {
+      throw new Error("No Studio Next contract address configured");
+    }
+
+    const client = await createStudioNextClient();
+
+    const infoRaw = await client.readContract({
+      address: status.contractAddress as `0x${string}`,
+      functionName: "get_contract_info",
+    });
+    const info = (typeof infoRaw === "string" && infoRaw.length > 0
+      ? JSON.parse(infoRaw)
+      : infoRaw) as Record<string, unknown> | null;
+    if (info && typeof info === "object") {
+      const name = info.name ?? info.title;
+      if (typeof name === "string" && name.length > 0) status.contractName = name;
+    }
+
+    const idsRaw = await client.readContract({
+      address: status.contractAddress as `0x${string}`,
+      functionName: "get_verification_ids",
+    });
+    const ids = (typeof idsRaw === "string" && idsRaw.length > 0
+      ? JSON.parse(idsRaw)
+      : idsRaw) as unknown;
+    if (Array.isArray(ids)) status.verificationCount = ids.length;
+
+    status.reachable = true;
+  } catch (err) {
+    status.error = String(err instanceof Error ? err.message : err);
+  }
+  return status;
 }

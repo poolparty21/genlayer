@@ -123,6 +123,10 @@ body { margin: 0; background: var(--bg); color: var(--text); font-family: var(--
 .network-stats strong, .network-stats span { display: block; }
 .network-stats strong { font-size: 1.25rem; }
 .network-stats span { margin-top: .2rem; color: var(--muted); font-size: .68rem; }
+.studio-status { display: flex; flex-wrap: wrap; align-items: center; gap: .55rem; border-left: 1px solid var(--border); padding-left: 1rem; }
+.studio-status-note { color: var(--muted); font-size: .72rem; font-family: var(--font-mono), ui-monospace, monospace; }
+.studio-status-link { color: var(--orange-dark); font-weight: 700; }
+.studio-status-link:hover { text-decoration: underline; }
 .sidebar-card { border: 1px solid var(--border); border-radius: 14px; background: var(--surface); padding: 1rem; box-shadow: 0 4px 15px rgba(38,32,24,.025); }
 .sidebar-stat { display: flex; align-items: center; justify-content: space-between; gap: .5rem; border-top: 1px solid var(--border); margin-top: .75rem; padding-top: .75rem; color: var(--muted); font-size: .75rem; }
 .sidebar-stat strong { color: var(--text); font-size: .75rem; }
