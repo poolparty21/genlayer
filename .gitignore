@@ -9,3 +9,6 @@ dist/
 coverage/
 frontend/.env.local
 artifacts/
+
+# Scratch investigation artifacts — never track (guards the hourly auto-commit)
+.tmp-*
