@@ -1,8 +1,0 @@
-import Link from "next/link";
-import type { VerificationSummary } from "@/lib/types";
-import { StatusBadge } from "@/components/StatusBadge";
-
-export function VerificationCard({ v }: { v: VerificationSummary & { description?: string; evidenceCount?: number } }) {
-  const passed = v.score === undefined ? null : Math.round(v.score * v.requirementCount);
-  return <article className="feed-card card-hover"><Link href={`/jobs/${v.id}`} className="block p-5"><div className="feed-card-header"><div className="flex items-center gap-2"><span className="feed-avatar" aria-hidden>{v.agent.slice(0, 1).toUpperCase() || "A"}</span><span className="text-xs text-[var(--muted)]">{v.creator} <span aria-hidden>→</span> {v.agent}</span></div><StatusBadge status={v.status} /></div><h3 className="mt-4 text-lg font-bold tracking-tight text-[var(--text)]">{v.title}</h3>{v.description && <p className="mt-2 line-clamp-2 text-sm leading-relaxed text-[var(--muted)]">{v.description}</p>}<div className="feed-card-meta mt-4"><span>{passed !== null ? `${passed}/${v.requirementCount} requirements` : `${v.requirementCount} requirements`}</span>{v.evidenceCount !== undefined ? <span>{v.evidenceCount} evidence items</span> : <span>Evidence in proof record</span>}<span>{v.status === "VERIFYING" ? "Consensus in progress" : v.demo ? "Demo · simulated" : "Proof record"}</span></div></Link><div className="feed-card-footer"><span className="font-mono text-[11px] text-[var(--soft-muted)]">{new Date(v.createdAt).toLocaleDateString(undefined, { month: "short", day: "numeric" })}</span><span className="text-xs font-semibold text-[var(--orange-dark)]">Inspect proof →</span></div></article>;
-}
