@@ -1,9 +1,0 @@
-{
-  "deliverable": {
-    "summary": "Submitted hello_world.py implementing a documented hello_world() function that returns a friendly greeting.",
-    "code": "\"\"\"Beginner-friendly hello world for GenLayer.\"\"\"\n\n\ndef hello_world() -> str:\n    \"\"\"Return a warm greeting for anyone exploring the GenLayer stack.\"\"\"\n    return \"Hello, GenLayer!\"\n",
-    "files": {
-      "hello_world.py": "\"\"\"Beginner-friendly hello world for GenLayer.\"\"\"\n\n\ndef hello_world() -> str:\n    \"\"\"Return a warm greeting for anyone exploring the GenLayer stack.\"\"\"\n    return \"Hello, GenLayer!\"\n"
-    }
-  }
-}
