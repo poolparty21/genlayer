@@ -13,3 +13,14 @@ Gold-standard contract (task queues, gates, deploy notes): `../flight/AGENTS.md`
   durable decisions/facts to mem0 (`node C:\mnt\www\scripts\mem0.cjs add genlayer "FACT: …"`).
   **Never store secrets** — keys live in env vars / `.env*`, never in memory.
 - Protocol: `C:\mnt\www\.clinerules\memory-skill.md` and `~/.agents/skills/mem0/SKILL.md`.
+
+## Skill protocol (MANDATORY — owner-issued standing orders)
+
+**Canonical trigger table: `C:\mnt\www\SKILLS.md`** — one page for the whole workspace
+(graphify, grilling/grill-me, frontend-design, SEO, payments, browser proof, video, i18n,
+analytics and the rest). Read it before doing the work, and open the named skill's
+`SKILL.md` before the work it governs. Skills live in `~/.agents/skills/` (user-global) and
+`<project>/.agents/skills/` (repo-local, committed).
+
+Self-check before ending any turn: if your work matched a trigger and you never opened the
+skill, the turn is not done.
